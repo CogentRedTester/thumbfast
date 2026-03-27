@@ -969,33 +969,26 @@ mp.set_property_native('user-data/mpv/thumbnailers/'..mp.get_script_name(), {
 local pending_requests = {}
 
 function mp_thumbnail_response(w, h, request, thumbnail)
-    for i, req in ipairs(pending_requests) do
-        if req.response_handler == request.response_handler then
-            mp.commandv("script-message-to", req.client_name, req.response_handler, mp.utils.format_json({
-                w = w,
-                h = h,
-                thumbnail = thumbnail,
-            }))
-
-            for j = i, 1, -1 do
-                table.remove(pending_requests, j)
-            end
-            return
-        else
-            mp.commandv("script-message-to", req.client_name, req.response_handler, "", "")
-        end
-    end
-
     -- if we have generated too many thumbnails, then immediately delete them
-    os.remove(thumbnail)
+    if request then
+        mp.commandv("script-message-to", request.client_name, request.response_handler, mp.utils.format_json({
+            w = w,
+            h = h,
+            thumbnail = thumbnail,
+        }))
+    else
+        os.remove(thumbnail)
+    end
 end
 
 mp.register_script_message('generate-thumbnail', function(req)
     req = mp.utils.parse_json(req)
     if not req then return end
 
+    if latest_request then
+        mp.commandv("script-message-to", latest_request.client_name, latest_request.response_handler, "", "")
+    end
     latest_request = req
-    table.insert(pending_requests, req)
 
     thumb(req.t, "", "", req.client_name)
 end)
