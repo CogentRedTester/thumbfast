@@ -985,6 +985,11 @@ mp.register_script_message('generate-thumbnail', function(req)
     req = mp.utils.parse_json(req)
     if not req then return end
 
+    -- for now we don't support multiple requests at once
+    if latest_request.id ~= req.id then
+        return mp.commandv("script-message-to", latest_request.client_name, latest_request.response_handler, "", "")
+    end
+
     if latest_request then
         mp.commandv("script-message-to", latest_request.client_name, latest_request.response_handler, "", "")
     end
