@@ -592,7 +592,7 @@ local function run(command)
     end
 end
 
-local function draw(w, h, script)
+local function draw(w, h, script, thumbnail)
     if not w or not show_thumbnail then return end
     if x ~= nil then
         local scale_w, scale_h = options.scale_factor ~= 1 and (w * options.scale_factor) or nil, options.scale_factor ~= 1 and (h * options.scale_factor) or nil
@@ -601,8 +601,8 @@ local function draw(w, h, script)
         else
             mp.command_native_async({"overlay-add", options.overlay_id, x, y, options.thumbnail..".bgra", 0, "bgra", w, h, (4*w), scale_w, scale_h}, function() end)
         end
-    elseif script then
-        local json, err = mp.utils.format_json({width=w, height=h, scale_factor=options.scale_factor, x=x, y=y, socket=options.socket, thumbnail=options.thumbnail, overlay_id=options.overlay_id})
+    elseif script and thumbnail then
+        local json, err = mp.utils.format_json({width=w, height=h, scale_factor=options.scale_factor, x=x, y=y, socket=options.socket, thumbnail=thumbnail, overlay_id=options.overlay_id})
         mp.commandv("script-message-to", script, "thumbfast-render", json)
     end
 end
@@ -689,7 +689,13 @@ local function check_new_thumb()
     spawn_waiting = false
     local w, h = real_res(effective_w, effective_h, finfo.size)
     if w then -- only accept valid thumbnails
-        move_file(tmp, options.thumbnail..".bgra")
+        local thumbnail
+        if script_name then
+            thumbnail = os.tmpname()
+        else
+            thumbnail = options.thumbnail..".bgra"
+        end
+        move_file(tmp, thumbnail)
 
         real_w, real_h = w, h
         if real_w and (real_w ~= last_real_w or real_h ~= last_real_h) then
@@ -699,15 +705,16 @@ local function check_new_thumb()
         if not show_thumbnail then
             file_timer:kill()
         end
-        return true
+        return thumbnail
     end
 
     return false
 end
 
 file_timer = mp.add_periodic_timer(file_check_period, function()
-    if check_new_thumb() then
-        draw(real_w, real_h, script_name)
+    local new_file = check_new_thumb()
+    if new_file then
+        draw(real_w, real_h, script_name, new_file)
     end
 end)
 file_timer:kill()
