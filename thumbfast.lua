@@ -154,6 +154,7 @@ local real_w, real_h
 local last_real_w, last_real_h
 
 local script_name
+local latest_request
 
 local show_thumbnail = false
 
@@ -601,6 +602,8 @@ local function draw(w, h, script, thumbnail)
         else
             mp.command_native_async({"overlay-add", options.overlay_id, x, y, options.thumbnail..".bgra", 0, "bgra", w, h, (4*w), scale_w, scale_h}, function() end)
         end
+    elseif latest_request and thumbnail then
+        mp_thumbnail_response(w, h, latest_request, thumbnail)
     elseif script and thumbnail then
         local json, err = mp.utils.format_json({width=w, height=h, scale_factor=options.scale_factor, x=x, y=y, socket=options.socket, thumbnail=thumbnail, overlay_id=options.overlay_id})
         mp.commandv("script-message-to", script, "thumbfast-render", json)
@@ -956,3 +959,43 @@ mp.register_event("file-loaded", file_load)
 mp.register_event("shutdown", shutdown)
 
 mp.register_idle(watch_changes)
+
+mp.set_property_native('user-data/mpv/thumbnailers/'..mp.get_script_name(), {
+    priority = 50,
+    paths = { "^/" },
+    current_file_only = true,
+})
+
+local pending_requests = {}
+
+function mp_thumbnail_response(w, h, request, thumbnail)
+    for i, req in ipairs(pending_requests) do
+        if req.response_handler == request.response_handler then
+            mp.commandv("script-message-to", req.client_name, req.response_handler, mp.utils.format_json({
+                w = w,
+                h = h,
+                thumbnail = thumbnail,
+            }))
+
+            for j = i, 1, -1 do
+                table.remove(pending_requests, j)
+            end
+            return
+        else
+            mp.commandv("script-message-to", req.client_name, req.response_handler, "", "")
+        end
+    end
+
+    -- if we have generated too many thumbnails, then immediately delete them
+    os.remove(thumbnail)
+end
+
+mp.register_script_message('generate-thumbnail', function(req)
+    req = mp.utils.parse_json(req)
+    if not req then return end
+
+    latest_request = req
+    table.insert(pending_requests, req)
+
+    thumb(req.t, "", "", req.client_name)
+end)
